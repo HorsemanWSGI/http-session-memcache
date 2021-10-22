@@ -5,7 +5,7 @@ version = '0.1'
 
 install_requires = [
     'http_session',
-    'pymemcache >= 1.4.0',
+    'pymemcache >= 3.5.0',
 ]
 
 tests_require = [
