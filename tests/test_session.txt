@@ -1,0 +1,95 @@
+The application
+---------------
+
+    >>> sid = None
+
+    >>> def simple_app(environ, start_response):
+    ...     """retained visited path, raise exception if path contain 'fail'
+    ...     """
+    ...     session = environ['sess']
+    ...     global sid
+    ...     sid = session.sid
+    ...     session['my_value'] = session.get('my_value', 0) + 1
+    ...     session.save()
+    ...     start_response('200 OK', [('Content-type', 'text/plain')])
+    ...     return ['Called {0} time(s)'.format(session['my_value']).encode('utf-8')]
+
+
+The middleware
+--------------
+
+In order to test the session cookie and general application flow,
+we'll start by testing the middleware. The middleware handles the
+creation of a cookie and stores a session id inside. This session is
+is signed and timestamped, in order to overcome the "guessable" nature
+of a session id and its possible weakness. It also adds another layer of
+expiration, since the signature can be (is) checked for its max age.
+
+First of all, we need a memcache connection. This task is not part of the
+package but it integral to the application in which the session will be
+used. You'll have to handle the connection, pools and everything
+redis-related in your application.
+
+To test, we have a very simple memcache connection :
+
+    >>> from pymemcache.client.base import Client
+    >>> memcache = Client(('127.0.0.1', 11211))
+
+From that, we can instanciate our middleware :
+
+    >>> from cromlech.sessions.memcache import MemcacheStore
+    >>> from cromlech.session import SignedCookieManager, WSGISessionManager
+
+    >>> handler = MemcacheStore(memcache, 300)
+    >>> manager = SignedCookieManager('secret', handler, cookie='my_sid')
+    >>> middleware = WSGISessionManager(manager, environ_key='sess')
+
+    >>> from webtest import TestApp
+    >>> wsgi_app = TestApp(middleware(simple_app))
+    >>> result = wsgi_app.get('/')
+    >>> result.status
+    '200 OK'
+    >>> result.headers['Set-Cookie']
+    'my_sid=...; Expires=...; Domain=localhost; Path=/'
+    >>> result.body
+    b'Called 1 time(s)'
+
+In our tests, sid was saved in a global variable
+when is the application is run:
+
+    >>> handler.get(sid)
+    {'my_value': 1}
+
+    >>> result = wsgi_app.get('/')
+    >>> result.body
+    b'Called 2 time(s)'
+
+    >>> handler.clear(sid)
+    >>> result = wsgi_app.get('/')
+    >>> result.body
+    b'Called 1 time(s)'
+
+    >>> handler.get(sid)
+    {'my_value': 1}
+
+    >>> handler.clear(sid)
+    >>> handler.get(sid)
+    {}
+
+Timeout
+-------
+
+    >>> handler = MemcacheStore(memcache, 1)
+    >>> handler.set('test', {'test': 'this is a test'})
+    >>> handler.get('test')
+    {'test': 'this is a test'}
+
+Let's sleep it off :
+
+    >>> import time
+    >>> time.sleep(1)
+
+Gone !
+
+    >>> handler.get('test')
+    {}
