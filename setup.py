@@ -5,17 +5,15 @@ version = '0.1'
 
 install_requires = [
     'http_session',
-    'cromlech.marshallers',
     'pymemcache >= 1.4.0',
 ]
 
 tests_require = [
-    'WebTest',
     'pytest',
 ]
 
 setup(
-    name='http-session-memcache',
+    name='http_session_memcache',
     version=version,
     description="HTTP session handling using memcache as a backend.",
     long_description=(
